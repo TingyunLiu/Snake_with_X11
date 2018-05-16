@@ -1,6 +1,4 @@
 /*
-CS 349 A1 Skeleton Code - Snake
-
 - - - - - - - - - - - - - - - - - - - - - -
 
 Commands to compile and run:
@@ -138,11 +136,6 @@ int MyMod(int start, int end, int value) {
 	} else { // value < 0, this case is only possible for x coord (start = 0)
 		return end - (abs(value) % end);
 	}
-/*
-	int size = end - start;
-	int corrVal = value - start;
-	return start + ((corrVal >= 0) ? (corrVal % size) : (size - ((-corrVal) % size)));
-*/
 }
 
 
@@ -199,12 +192,9 @@ class Fruit : public Displayable {
 public:
 	virtual void paint(XInfo &xinfo) {
 		XFillArc(xinfo.display, xinfo.window, xinfo.gc[BLUE_GC], x, y, BlockSize, BlockSize, 0, 360*64);
-		//XDrawArc(xinfo.display, xinfo.window, xinfo.gc[BLUE_GC], x, y, BlockSize, BlockSize, 0, 23040);
-		//XFillRectangle(xinfo.display, xinfo.window, xinfo.gc[0], x, y, BlockSize, BlockSize);
 	}
 
 	Fruit() {
-		// ** ADD YOUR LOGIC **
 		// generate the x and y value for the fruit
 		x = RegionStartX + 2 * BlockSize;
 		y = RegionStartY + 2 * BlockSize;
@@ -219,10 +209,6 @@ public:
 	int getY() {
 		return y;
 	}
-	// ** ADD YOUR LOGIC **
-	/*
-     * The fruit needs to be re-generated at new location every time a snake eats it. See the assignment webpage for more details.
-     */
 
 	void generateNewFruit(int &new_x, int &new_y) {
 		new_x = roundBlockSize(rand() % (width - BlockSize));
@@ -439,12 +425,6 @@ class Snake : public Displayable {
 		    }
 		}
 
-        /*
-         * ** ADD YOUR LOGIC **
-         * Use these placeholder methods as guidance for implementing the snake behaviour. 
-         * You do not have to use these methods, feel free to implement your own.
-         */
-
 		bool onSnakeBody(int x, int y) {
         	for (int i = 1; i < snakeBody.size(); i++) {
         	    if (x == snakeBody[i].getX() && y == snakeBody[i].getY()) {
@@ -502,9 +482,6 @@ class Snake : public Displayable {
         }
 
 		void move(XInfo &xinfo) {
-			// ** ADD YOUR LOGIC **
-			// Here, you will be performing collision detection between the snake,
-			// the fruit, and the obstacles depending on what the snake lands on.
 			if (curStage != PLAY_STG) return;
 
 			headX = MyMod(RegionStartX, RegionEndX, headX + x_speed);
@@ -851,12 +828,6 @@ void handleButtonPress(XInfo &xinfo, XEvent &event) {
 }
 
 void handleAnimation(XInfo &xinfo, int inside) {
-    /*
-     * ADD YOUR OWN LOGIC
-     * This method handles animation for different objects on the screen and readies the next frame before the screen is re-painted.
-     */ 
-
-	//cout << "inside: " << inside << endl;
 	if (inside == 1 && lastEnterLeaveNotify == 0) { // EnterNotify
 		resume(snake);
 	} else if (inside == 0 && lastEnterLeaveNotify == 1) { // LeaveNotify
@@ -893,11 +864,6 @@ void eventLoop(XInfo &xinfo) {
 	curStage = START_STG;
 
 	while( true ) {
-		/*
-		 * This is NOT a performant event loop!  
-		 * It needs help!
-		 */
-		
 		if (XPending(xinfo.display) > 0) {
 			XNextEvent( xinfo.display, &event );
 			cout << "event.type=" << event.type << "\n";
