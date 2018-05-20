@@ -53,6 +53,7 @@ using namespace std;
 #define TOMATO_GC 3
 #define GRAY_GC 4
 #define DIMGRAY_GC 5
+#define DARKKHAKI 6
 
 #define NEW_CENT_FT 0
 #define TIMES_FT 1
@@ -64,16 +65,23 @@ using namespace std;
 #define PAUSE_STG 0x4
 #define GAMEOVER_STG 0x8
 
+#define NORMAL_FRT 0
+#define HEART_FRT 1
+#define EVIL_FRT 2
+
+#define MAX_LIVES 5
+#define MAX_OBSTACLES 12
+#define MIN_OBSTACLES 5
+
 /*
  * Global game state variables
  */
 const int Border = 10;
 const int BufferSize = 10;
-int FPS = 30;
 const int width = 800;
 const int height = 600;
-
 const int BlockSize = 20;
+int FPS = 30;
 int speed = 5;
 
 const int RegionStartX = 0;
@@ -85,8 +93,13 @@ int curXspeed = 0;
 int curYspeed = 0;
 
 int lastEnterLeaveNotify = 0;
+unsigned long lastTimeSpecialFruit = 0;
+unsigned long SpecialFruitTimeUsed = 0;
 
 unsigned int score = 0;
+
+unsigned int numOfLives = 1;
+
 
 /* stage indicates the current stage of the game (start, playing, pause, gameover) */
 int curStage = 0;
@@ -98,7 +111,7 @@ struct XInfo {
 	Display	 *display;
 	int		 screen;
 	Window	 window;
-	GC		 gc[6];
+	GC		 gc[7];
 	XFontStruct  *font[4];
 	int		width;		// size of window
 	int		height;
@@ -138,6 +151,12 @@ int MyMod(int start, int end, int value) {
 	}
 }
 
+// get microseconds
+unsigned long now() {
+	timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec * 1000000 + tv.tv_usec;
+}
 
 void loadFonts(XInfo &xinfo) {
 	const char *fontname = "-adobe-new century schoolbook-bold-i-normal--20-140-100-100-p-111-iso8859-10";
@@ -187,17 +206,146 @@ class Displayable {
 		int stage;
 };
 
+class Obstacle : public Displayable {
+public:
+	virtual void paint(XInfo &xinfo) {
+		XFillRectangle(xinfo.display, xinfo.window, xinfo.gc[DARKKHAKI], x, y, xLength, yLength);
+	}
+
+	Obstacle() {
+		stage = PLAY_STG;
+
+		unsigned int length = rand() % MAX_OBSTACLES;
+		length = (length >= MIN_OBSTACLES) ? length : (length + MIN_OBSTACLES);
+		length = length * BlockSize;
+
+		baseSide = rand() % 4;
+
+		switch (baseSide) {
+			case UP:
+				x = MyMod(RegionStartX, RegionEndX, roundBlockSize(rand() % (RegionEndX - BlockSize))); 
+				y = RegionStartY;
+				xLength = BlockSize;
+				yLength = length;
+				break;
+			case DOWN:
+				x = MyMod(RegionStartX, RegionEndX, roundBlockSize(rand() % (RegionEndX - BlockSize))); 
+				y = RegionEndY-length;
+				xLength = BlockSize;
+				yLength = length;
+				break;
+			case LEFT:
+				x = RegionStartX;
+				y = MyMod(RegionStartY, RegionEndY, roundBlockSize(rand() % (RegionEndY - BlockSize)));
+				xLength = length;
+				yLength = BlockSize;			
+				break;
+			case RIGHT:
+				x = RegionEndX-length;
+				y = MyMod(RegionStartY, RegionEndY, roundBlockSize(rand() % (RegionEndY - BlockSize)));
+				xLength = length;
+				yLength = BlockSize;
+				break;
+		}
+	}
+
+	int getX() {
+		return x;
+	}
+
+	int getY() {
+		return y;
+	}
+
+	int getXLength() {
+		return xLength;
+	}
+
+	int getYLength() {
+		return yLength;
+	}
+
+private:
+	unsigned int baseSide; // UP, DOWN, LEFT, RIGHT
+	unsigned int x;
+	unsigned int y;
+	unsigned int xLength;
+	unsigned int yLength;
+};
+
+
+class Obstacles : public Displayable {
+public:
+	virtual void paint(XInfo &xinfo) {
+		for (unsigned i = 0; i < numOfObs; i++) {
+			obs[i].paint(xinfo);
+		}
+	}
+
+	void generateObstacles() {
+		/*
+		for (unsigned i = 0; i < numOfObs; i++) {
+			delete obs[i];
+		}
+		*/
+		delete [] obs;
+
+		numOfObs = rand() % MAX_OBSTACLES;
+		numOfObs = (numOfObs >= MIN_OBSTACLES) ? numOfObs : (numOfObs + MIN_OBSTACLES);
+
+		obs = new Obstacle[numOfObs];
+		for (unsigned i = 0; i < numOfObs; i++) {
+			obs[i] = Obstacle();
+		}
+	}
+
+	Obstacles() {
+		stage = PLAY_STG;
+		numOfObs = 0;
+		generateObstacles();
+	}
+
+	~Obstacles() {
+		/*
+		for (unsigned i = 0; i < numOfObs; i++) {
+			delete obs[i];
+		}
+		*/
+		delete [] obs;
+	}
+
+	int getNumOfObs() {
+		return numOfObs;
+	}
+
+	Obstacle* getObs() {
+		return obs;
+	}
+
+private:
+	Obstacle *obs;
+	unsigned int numOfObs;
+};
 
 class Fruit : public Displayable {
 public:
 	virtual void paint(XInfo &xinfo) {
-		XFillArc(xinfo.display, xinfo.window, xinfo.gc[BLUE_GC], x, y, BlockSize, BlockSize, 0, 360*64);
+		if (attribute == NORMAL_FRT) {
+			XFillArc(xinfo.display, xinfo.window, xinfo.gc[BLUE_GC], x, y, BlockSize, BlockSize, 0, 360*64);
+		} else {
+			unsigned long turquoise = 0x40E0D0;
+			unsigned long dodgerblue = 0x1E90FF;
+			XSetForeground(xinfo.display, xinfo.gc[BLUE_GC], turquoise);
+			XDrawArc(xinfo.display, xinfo.window, xinfo.gc[BLUE_GC], x, y, BlockSize-5, BlockSize-5, 0, 360*64);
+			XSetForeground(xinfo.display, xinfo.gc[BLUE_GC], dodgerblue);
+		}
 	}
 
 	Fruit() {
 		// generate the x and y value for the fruit
-		x = RegionStartX + 2 * BlockSize;
-		y = RegionStartY + 2 * BlockSize;
+		x = 540;
+		y = 300;
+		attribute = NORMAL_FRT;
 
 		stage = PLAY_STG;
 	}
@@ -210,16 +358,30 @@ public:
 		return y;
 	}
 
+	int getAttribute() {
+		return attribute;
+	}
+
 	void generateNewFruit(int &new_x, int &new_y) {
 		new_x = roundBlockSize(rand() % (width - BlockSize));
 		new_y = roundBlockSize(rand() % (height - BlockSize));
 		x = new_x;
 		y = new_y;
+
+		int chance = rand() % 12;
+		if (chance > 9) { // 2/12 chance evil fruit
+			attribute = EVIL_FRT;
+		} else if (chance > 6) { // 3/12 chance heart fruit
+			attribute = HEART_FRT;
+		} else { // 7/12 chance normal fruit
+			attribute = NORMAL_FRT;
+		}
 	}
 
 private:
 	int x;
 	int y;
+	int attribute; // 0 - normal fruit, 1 - heart fruit (increse lives by 1), 2 - evil fruit (decrease by 1)
 };
 
 
@@ -232,7 +394,17 @@ public:
 		string scoreStr = "Score : " + to_string(score);
 		XDrawString(xinfo.display, xinfo.window, xinfo.gc[TOMATO_GC], 20, 29, scoreStr.c_str(), scoreStr.length());
 
+
+		unsigned i = numOfLives-1;
+		for (unsigned j = 0; j < numOfLives && j < MAX_LIVES; j++) {
+			int k = j * 35;
+			XPoint points[10] = {{250+k, 20}, {255+k, 15}, {260+k, 15}, {263+k, 18}, {263+k, 22},
+								 {250+k, 35}, {237+k, 22}, {237+k, 18}, {240+k, 15}, {245+k, 15}};
+			XFillPolygon(xinfo.display, xinfo.window, xinfo.gc[TOMATO_GC], points, 10, Nonconvex, CoordModeOrigin);			
+		}
+
 		setFont(xinfo, GRAY_GC, TIMES_FT);
+
 		string text = "Press  p - pause,  r - restart,  q - quit";
 		XDrawString(xinfo.display, xinfo.window, xinfo.gc[GRAY_GC], 520, 29, text.c_str(), text.length());
 	
@@ -370,6 +542,7 @@ public:
 
 
 Fruit fruit;
+Obstacles obstacles;
 
 
 class Block {
@@ -395,6 +568,7 @@ class Snake : public Displayable {
 			stage = PLAY_STG;
 			x_speed = BlockSize;
 			y_speed = 0;
+			lastTimeSpecialFruit = now();
 
 			Block blk1(headX, headY);
 			Block blk2(headX-1*BlockSize, headY);
@@ -434,6 +608,19 @@ class Snake : public Displayable {
         	return false;			
 		}
 
+		bool onObstacles(int x, int y) {
+			unsigned int numOfObs = obstacles.getNumOfObs();
+			Obstacle *obs = obstacles.getObs();
+
+			for (unsigned i = 0; i < numOfObs; i++) {
+				if ((x >= obs[i].getX()) && (x < obs[i].getX()+obs[i].getXLength()) &&
+					(y >= obs[i].getY()) && (y < obs[i].getY()+obs[i].getYLength())) {
+					return true;
+				}
+			}
+			return false;
+		}
+
         bool didHitSnakeitself() {
         	if (onSnakeBody(headX, headY)) {
         		cout << "Hit snake itself!" << endl;
@@ -442,30 +629,59 @@ class Snake : public Displayable {
         	return false;
         }
 
-		bool didEatFruit(Fruit &frt) {
-
-			//if (euclideanDistance(frt.getX(), frt.getY(), headX, headY) < (float)BlockSize) {
-			if (frt.getX() == headX && frt.getY() == headY) {
-				score++;
-				cout << "Eat Fruit!" << endl;
-
-				/* regenerate another fruit */
-				int new_x, new_y;
-				for (;;) {
-					frt.generateNewFruit(new_x, new_y); // new fruit position
-					// make sure new fruit is not overlapping with the snake body, and fruit is in proper region
-					if ((!onSnakeBody(new_x, new_y)) && (headX != new_x) && (headY != new_y) && (new_y >= RegionStartY)) {
-						cout << "X: " << new_x << " Y: " << new_y << endl;
-						break;
+        void regenerateFruit(Fruit &frt) {
+			/* regenerate another fruit */
+			int new_x, new_y;
+			for (;;) {
+				frt.generateNewFruit(new_x, new_y); // new fruit position
+				// make sure new fruit is not overlapping with the snake body, obstacles, and fruit is in proper region
+				if ((!onSnakeBody(new_x, new_y)) && (headX != new_x) && (headY != new_y) &&
+					(!onObstacles(new_x, new_y)) && (new_y >= RegionStartY)) {
+					cout << "X: " << new_x << " Y: " << new_y << endl;
+					if (frt.getAttribute() == HEART_FRT || frt.getAttribute() == EVIL_FRT) {
+						lastTimeSpecialFruit = now();
 					}
+					break;
 				}
-
-				return true;
-			} else {
-				return false;
 			}
         }
 
+		bool didEatFruit(Fruit &frt, int &attribute) {
+			if (frt.getX() == headX && frt.getY() == headY) {
+				if (frt.getAttribute() == NORMAL_FRT) {
+					score++;
+					cout << "Eat Scoring Fruit!" << endl;
+					attribute = NORMAL_FRT;
+				} else if (frt.getAttribute() == HEART_FRT) {
+					if (numOfLives < 5) {
+						numOfLives++;
+						cout << "Eat Heart Fruit, incresed lives by 1" << endl;
+					} else {
+						cout << "Hit Max Lives" << endl;
+					}
+					attribute = HEART_FRT;
+				} else { // evil fruit
+					numOfLives--;
+					cout << "Eat Evil Fruit, decreased lives by 1" << endl;
+					attribute = EVIL_FRT;
+					if (numOfLives == 0) {
+						curStage = GAMEOVER_STG;
+						return true;
+					}
+				}
+
+				regenerateFruit(frt);
+
+				return true;
+			} else {
+				if ((frt.getAttribute() == HEART_FRT || frt.getAttribute() == EVIL_FRT) &&
+					((now() - lastTimeSpecialFruit) > 35000000/speed)) { // regenerate after 5s if special fruits
+					regenerateFruit(frt);
+				}
+				return false;
+			}
+        }
+/*
         bool didHittheWall() {
         	if (headX < RegionStartX || headX > RegionEndX || headY < RegionStartY || headY > RegionStartY) {
         		cout << "Hit the wall!" << endl;
@@ -473,11 +689,24 @@ class Snake : public Displayable {
         	}
         	return false;
         }
+*/
+		bool didHitObstacle() {
+			if (onObstacles(headX, headY)) {
+				cout << "Hit the obstables" << endl;
+				return true;
+			}
+			return false;
+        }
 
-		void didHitObstacle() {
-		    if (didHitSnakeitself()) {
-		    	curStage = GAMEOVER_STG;
-		    	cout << "Game Over!" << endl;
+        void didDead() {
+		    if (didHitSnakeitself() || didHitObstacle()) {
+		    	numOfLives--;
+		    	if (numOfLives == 0) {
+		    		curStage = GAMEOVER_STG;
+		    		cout << "Game Over!" << endl;
+		    	} else {
+		    		//TODO
+		    	}
 		    }
         }
 
@@ -487,9 +716,10 @@ class Snake : public Displayable {
 			headX = MyMod(RegionStartX, RegionEndX, headX + x_speed);
 			headY = MyMod(RegionStartY, RegionEndY, headY + y_speed);
 
-			didHitObstacle();
+			didDead();
 
-			if (!didEatFruit(fruit)) {
+			int attribute;
+			if (!(didEatFruit(fruit, attribute) && attribute == NORMAL_FRT)) {
 				snakeBody.pop_back();
 			}
 			Block blk(headX, headY);
@@ -561,7 +791,7 @@ class Snake : public Displayable {
 
 
 list<Displayable *> dList;           // list of Displayables
-Snake snake(200, 400);
+Snake snake(340, 300);
 ScoreDisplay scoreDisplay;
 StartDisplay startDisplay;
 PauseDisplay pauseDisplay;
@@ -644,7 +874,7 @@ void initX(int argc, char *argv[], XInfo &xInfo) {
 	XSetBackground(xInfo.display, xInfo.gc[i], BlackPixel(xInfo.display, xInfo.screen));
 	XSetFillStyle(xInfo.display, xInfo.gc[i], FillSolid);
 	XSetLineAttributes(xInfo.display, xInfo.gc[i],
-	                     1, LineSolid, CapButt, JoinRound);
+	                     5, LineSolid, CapButt, JoinRound);
 
 	i = 3;
 	unsigned long tomato = 0xFF6347;
@@ -672,6 +902,17 @@ void initX(int argc, char *argv[], XInfo &xInfo) {
 	XSetFillStyle(xInfo.display, xInfo.gc[i], FillOpaqueStippled);
 	XSetLineAttributes(xInfo.display, xInfo.gc[i],
 	                     1, LineSolid, CapButt, JoinRound);	
+
+
+	i = 6;
+	unsigned long darkkhaki = 0xBDB76B;
+	xInfo.gc[i] = XCreateGC(xInfo.display, xInfo.window, 0, 0);
+	XSetForeground(xInfo.display, xInfo.gc[i], darkkhaki);
+	XSetBackground(xInfo.display, xInfo.gc[i], BlackPixel(xInfo.display, xInfo.screen));
+	XSetFillStyle(xInfo.display, xInfo.gc[i], FillOpaqueStippled);
+	XSetLineAttributes(xInfo.display, xInfo.gc[i],
+	                     1, LineSolid, CapButt, JoinRound);
+
 
 	loadFonts(xInfo);
 
@@ -720,6 +961,7 @@ void repaint( XInfo &xinfo) {
 
 void pause(Snake &snk) {
 	if (curStage != PLAY_STG) return; // can only pause during PLAY stage
+	SpecialFruitTimeUsed = now() - lastTimeSpecialFruit;
 	curStage = PLAY_STG | PAUSE_STG;
 	curXspeed = snk.getXspeed();
 	curYspeed = snk.getYspeed();
@@ -733,6 +975,7 @@ void resume(Snake &snk) {
 	curStage = PLAY_STG;
 	snk.setXspeed(curXspeed);
 	snk.setYspeed(curYspeed);
+	lastTimeSpecialFruit = now() - SpecialFruitTimeUsed;
 }
 
 
@@ -761,8 +1004,10 @@ void handleKeyPress(XInfo &xinfo, XEvent &event) {
 			case 'R':
 				if (curStage == START_STG) break; // cannot restart at the start stage
 				curStage = PLAY_STG;
-				snake = Snake(200, 400);
+				numOfLives = 1;
+				snake = Snake(340, 300);
 				fruit = Fruit();
+				obstacles.generateObstacles();
 				score = 0;
 				break;
 			case 'p':
@@ -820,8 +1065,9 @@ void handleButtonPress(XInfo &xinfo, XEvent &event) {
 	}
 
 	//XDrawRectangle(xinfo.display, xinfo.window, xinfo.gc[TOMATO_GC], 405, 235, 22, 24);
-	/* Back Door to REBORN when dead: at pixel (405,235) width 22, height 24 */
+	/* Back Door to REBORN when dead: click the 'O' in GAME OVER around pixel (405,235) width 22, height 24 */
 	if ((curStage == GAMEOVER_STG) && (x >= 405) && (x <= (405+22)) && (y >= 235) && (y <= (235+24))) {
+		numOfLives++;
 		curStage = PLAY_STG;
 	}
 
@@ -839,18 +1085,12 @@ void handleAnimation(XInfo &xinfo, int inside) {
 	}
 }
 
-// get microseconds
-unsigned long now() {
-	timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000000 + tv.tv_usec;
-}
-
 void eventLoop(XInfo &xinfo) {
 	// Add stuff to paint to the display list
 	dList.push_front(&pauseDisplay);
 	dList.push_front(&snake);
     dList.push_front(&fruit);
+    dList.push_front(&obstacles);
     dList.push_front(&scoreDisplay);
     dList.push_front(&startDisplay);
 	dList.push_front(&gameoverDisplay);
