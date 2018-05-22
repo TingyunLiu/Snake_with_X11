@@ -28,7 +28,7 @@ Note: the -L option and -lstdc++ may not be needed on some machines.
 #include <queue>
 #include <time.h>
 #include <cstring>
-#include <string.h>
+#include <string>
 
 /*
  * Header files for X functions
@@ -98,7 +98,7 @@ unsigned long SpecialFruitTimeUsed = 0;
 
 unsigned int score = 0;
 
-unsigned int numOfLives = 1;
+unsigned int numOfLives = 50;
 
 
 /* stage indicates the current stage of the game (start, playing, pause, gameover) */
@@ -238,7 +238,7 @@ public:
 				x = RegionStartX;
 				y = MyMod(RegionStartY, RegionEndY, roundBlockSize(rand() % (RegionEndY - BlockSize)));
 				xLength = length;
-				yLength = BlockSize;			
+				yLength = BlockSize;
 				break;
 			case RIGHT:
 				x = RegionEndX-length;
@@ -283,11 +283,6 @@ public:
 	}
 
 	void generateObstacles() {
-		/*
-		for (unsigned i = 0; i < numOfObs; i++) {
-			delete obs[i];
-		}
-		*/
 		delete [] obs;
 
 		numOfObs = rand() % MAX_OBSTACLES;
@@ -306,11 +301,6 @@ public:
 	}
 
 	~Obstacles() {
-		/*
-		for (unsigned i = 0; i < numOfObs; i++) {
-			delete obs[i];
-		}
-		*/
 		delete [] obs;
 	}
 
@@ -336,7 +326,7 @@ public:
 			unsigned long turquoise = 0x40E0D0;
 			unsigned long dodgerblue = 0x1E90FF;
 			XSetForeground(xinfo.display, xinfo.gc[BLUE_GC], turquoise);
-			XDrawArc(xinfo.display, xinfo.window, xinfo.gc[BLUE_GC], x, y, BlockSize-5, BlockSize-5, 0, 360*64);
+			XDrawArc(xinfo.display, xinfo.window, xinfo.gc[BLUE_GC], x, y, BlockSize-4, BlockSize-4, 0, 360*64);
 			XSetForeground(xinfo.display, xinfo.gc[BLUE_GC], dodgerblue);
 		}
 	}
@@ -348,6 +338,8 @@ public:
 		attribute = NORMAL_FRT;
 
 		stage = PLAY_STG;
+
+		srand(time(0)); // random number seed
 	}
 
 	int getX() {
@@ -368,12 +360,12 @@ public:
 		x = new_x;
 		y = new_y;
 
-		int chance = rand() % 12;
-		if (chance > 9) { // 2/12 chance evil fruit
+		int chance = rand() % 10;
+		if (chance > 8) { // 1/10 chance evil fruit
 			attribute = EVIL_FRT;
-		} else if (chance > 6) { // 3/12 chance heart fruit
+		} else if (chance > 6) { // 2/10 chance heart fruit
 			attribute = HEART_FRT;
-		} else { // 7/12 chance normal fruit
+		} else { // 7/10 chance normal fruit
 			attribute = NORMAL_FRT;
 		}
 	}
@@ -568,6 +560,7 @@ class Snake : public Displayable {
 			stage = PLAY_STG;
 			x_speed = BlockSize;
 			y_speed = 0;
+			stillInObstacles = false;
 			lastTimeSpecialFruit = now();
 
 			Block blk1(headX, headY);
@@ -584,7 +577,8 @@ class Snake : public Displayable {
 
 		virtual void paint(XInfo &xinfo) {
 			/* Draw snake head with different color */
-		    for (int i = 0; i < snakeBody.size(); i++) {
+			/* from size()-1 to 0 to display snake head always on top when hitting itself or obstacles */
+		    for (int i = snakeBody.size()-1; i >= 0; i--) {
 		        int blkX = snakeBody[i].getX();
 		        int blkY = snakeBody[i].getY();
 		        if (i == 0) {
@@ -671,11 +665,10 @@ class Snake : public Displayable {
 				}
 
 				regenerateFruit(frt);
-
 				return true;
 			} else {
 				if ((frt.getAttribute() == HEART_FRT || frt.getAttribute() == EVIL_FRT) &&
-					((now() - lastTimeSpecialFruit) > 35000000/speed)) { // regenerate after 5s if special fruits
+					((now() - lastTimeSpecialFruit) > 35000000/speed)) { // regenerate after some time if special fruits
 					regenerateFruit(frt);
 				}
 				return false;
@@ -700,13 +693,16 @@ class Snake : public Displayable {
 
         void didDead() {
 		    if (didHitSnakeitself() || didHitObstacle()) {
-		    	numOfLives--;
+		    	if (!stillInObstacles) {
+		    		stillInObstacles = true;
+		    		numOfLives--;
+		    	}
 		    	if (numOfLives == 0) {
 		    		curStage = GAMEOVER_STG;
 		    		cout << "Game Over!" << endl;
-		    	} else {
-		    		//TODO
 		    	}
+		    } else {
+		    	stillInObstacles = false;
 		    }
         }
 
@@ -716,15 +712,16 @@ class Snake : public Displayable {
 			headX = MyMod(RegionStartX, RegionEndX, headX + x_speed);
 			headY = MyMod(RegionStartY, RegionEndY, headY + y_speed);
 
+			cout << "x_speed: " << x_speed << " y_speed: " << y_speed << endl;
+
 			didDead();
 
 			int attribute;
-			if (!(didEatFruit(fruit, attribute) && attribute == NORMAL_FRT)) {
+			if (!didEatFruit(fruit, attribute) || !(attribute == NORMAL_FRT)) {
 				snakeBody.pop_back();
 			}
 			Block blk(headX, headY);
 			snakeBody.push_front(blk);
-
 		}
 
 		void changeDirection(int direction) {
@@ -734,30 +731,32 @@ class Snake : public Displayable {
 			int blk1X = snakeBody[0].getX();
 			int blk2X = snakeBody[1].getX();
 
+			/* if using original x_speed or y_speed to check if it's movable, would go down directly by pressing
+					LEFT and DOWN quickly from going up originally  */
 			bool movingAlongYcoord = (blk1X == blk2X); // if x coords are the same, so moving along y direction
 
 			switch (direction) { // only can change to directions that are perpendicular to the original direction
 				case UP:
 					if (!movingAlongYcoord) {
-						y_speed = -abs(x_speed);
+						y_speed = -BlockSize;
 						x_speed = 0;
 					}
 					break;
 				case DOWN:
 					if (!movingAlongYcoord) {
-						y_speed = abs(x_speed);
+						y_speed = BlockSize;
 						x_speed = 0;
 					}
 					break;
 				case RIGHT:
 					if (movingAlongYcoord) {
-						x_speed = abs(y_speed);
+						x_speed = BlockSize;
 						y_speed = 0;
 					}
 					break;
 				case LEFT:
 					if (movingAlongYcoord) {
-						x_speed = -abs(y_speed);
+						x_speed = -BlockSize;
 						y_speed = 0;
 					}
 					break;
@@ -785,6 +784,7 @@ class Snake : public Displayable {
 		int headY;
 		int x_speed;
 		int y_speed;
+		bool stillInObstacles;
         deque<Block> snakeBody;
 
 };
@@ -874,7 +874,7 @@ void initX(int argc, char *argv[], XInfo &xInfo) {
 	XSetBackground(xInfo.display, xInfo.gc[i], BlackPixel(xInfo.display, xInfo.screen));
 	XSetFillStyle(xInfo.display, xInfo.gc[i], FillSolid);
 	XSetLineAttributes(xInfo.display, xInfo.gc[i],
-	                     5, LineSolid, CapButt, JoinRound);
+	                     3, LineSolid, CapButt, JoinRound);
 
 	i = 3;
 	unsigned long tomato = 0xFF6347;
@@ -937,15 +937,6 @@ void repaint( XInfo &xinfo) {
 	list<Displayable *>::const_iterator end = dList.end();
 
 	XClearWindow( xinfo.display, xinfo.window );
-	
-	// get height and width of window (might have changed since last repaint)
-/*
-	XWindowAttributes windowInfo;
-	XGetWindowAttributes(xinfo.display, xinfo.window, &windowInfo);
-	unsigned int height = windowInfo.height;
-	unsigned int width = windowInfo.width;
-*/
-	// big black rectangle to clear background
     
 	// draw display list
 	while( begin != end ) {
@@ -997,6 +988,7 @@ void handleKeyPress(XInfo &xinfo, XEvent &event) {
 		printf("Got key press -- %c\n", text[0]);
 
 		switch (text[0]) { // handle upper case and lower case WASD/wasd keys
+			cout << "pressed: " << text[0] << endl;
 			case 'q':
 			case 'Q':
 				error("Terminating normally."); // can quit at any stage
@@ -1004,7 +996,7 @@ void handleKeyPress(XInfo &xinfo, XEvent &event) {
 			case 'R':
 				if (curStage == START_STG) break; // cannot restart at the start stage
 				curStage = PLAY_STG;
-				numOfLives = 1;
+				numOfLives = 3;
 				snake = Snake(340, 300);
 				fruit = Fruit();
 				obstacles.generateObstacles();
@@ -1084,22 +1076,90 @@ void handleAnimation(XInfo &xinfo, int inside) {
 		lastEnterLeaveNotify = inside;
 	}
 }
+/*
+void eventLoop(XInfo &xinfo) {
+	// Add stuff to paint to the display list
+	dList.push_front(&pauseDisplay);
+	dList.push_front(&snake);
+    dList.push_front(&fruit);
+    dList.push_front(&scoreDisplay);
+    dList.push_front(&obstacles);
+    dList.push_front(&startDisplay);
+	dList.push_front(&gameoverDisplay);
+
+	XEvent event;
+	unsigned long lastRepaint = now();
+	unsigned long lastMove = now();
+	int inside = 0;
+
+	curStage = START_STG;
+
+	unsigned long Start = now();
+	unsigned long End = now();
+
+	while( true ) {
+
+		if (XPending(xinfo.display) > 0) {
+			XNextEvent( xinfo.display, &event );
+			cout << "event.type=" << event.type << "\n";
+			switch( event.type ) {
+				case KeyPress:
+					handleKeyPress(xinfo, event);
+					break;
+				case EnterNotify:
+					inside = 1;
+					break;
+				case LeaveNotify:
+					inside = 0;
+					break;
+				case ButtonPress:
+					handleButtonPress(xinfo, event);
+					break;
+			}
+		}
+
+		unsigned long repaintEnd = now(); // time in microseconds
+		unsigned long difference = repaintEnd - lastRepaint;
+		if (repaintEnd - lastRepaint > 1000000/FPS) {
+			handleAnimation(xinfo, inside);
+			repaint(xinfo);
+			lastRepaint = now();
+		}
+
+		unsigned long moveEnd = now(); // time in microseconds
+		if (moveEnd - lastMove > 1000000/speed) {
+			snake.move(xinfo);
+			lastMove = now();
+		}
+
+		End = now();
+		if (XPending(xinfo.display) == 0) {
+			usleep(1000000/FPS - (End - Start));
+			Start = now();
+		} else {
+			if (End >= (Start + 1000000/FPS)) {
+				Start += 1000000/FPS;
+			}
+		}
+	}
+}
+
+*/
 
 void eventLoop(XInfo &xinfo) {
 	// Add stuff to paint to the display list
 	dList.push_front(&pauseDisplay);
 	dList.push_front(&snake);
     dList.push_front(&fruit);
-    dList.push_front(&obstacles);
     dList.push_front(&scoreDisplay);
+    dList.push_front(&obstacles);
     dList.push_front(&startDisplay);
 	dList.push_front(&gameoverDisplay);
 
 	XEvent event;
 	unsigned long lastRepaint = 0;
-	int inside = 0;
-
 	unsigned long lastMove = 0;
+	int inside = 0;
 
 	curStage = START_STG;
 
@@ -1131,13 +1191,19 @@ void eventLoop(XInfo &xinfo) {
 		}
 
 		unsigned long moveEnd = now(); // time in microseconds
-		if (moveEnd - lastMove > 500000/speed) {
+		if (moveEnd - lastMove > 1000000/speed) {
 			snake.move(xinfo);
 			lastMove = now();
 		}
 
 		if (XPending(xinfo.display) == 0) {
-			usleep(1000000/FPS - (repaintEnd - lastRepaint));
+			/*
+			cout << "difference: " << (repaintEnd - lastRepaint) << endl;
+			cout << "100000/FPS: " << 1000000/FPS << endl;
+			cout << "time sleep: " << 1000000/FPS - (repaintEnd - lastRepaint) << endl;
+*/
+			//cout << "time sleep: " << 1000000/FPS + lastRepaint - repaintEnd << endl;
+			usleep(1000000/FPS + repaintEnd - lastRepaint);
 		}
 	}
 }
@@ -1175,7 +1241,6 @@ int main ( int argc, char *argv[] ) {
         	usage(argv);
     } // switch
 
-    srand((unsigned int)time(0)); // random number seed
 	XInfo xInfo;
 
 	initX(argc, argv, xInfo);
