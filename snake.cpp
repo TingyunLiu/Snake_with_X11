@@ -100,9 +100,11 @@ unsigned int score = 0;
 
 unsigned int numOfLives = 3;
 
-
 /* stage indicates the current stage of the game (start, playing, pause, gameover) */
 int curStage = 0;
+
+/* enable to 1 to have output */
+int verbose = 0;
 
 /*
  * Information to draw on the window.
@@ -617,7 +619,7 @@ class Snake : public Displayable {
 
         bool didHitSnakeitself() {
         	if (onSnakeBody(headX, headY)) {
-        		cout << "Hit snake itself!" << endl;
+        		if (verbose) cout << "Hit snake itself!" << endl;
         		return true;
         	}
         	return false;
@@ -631,7 +633,7 @@ class Snake : public Displayable {
 				// make sure new fruit is not overlapping with the snake body, obstacles, and fruit is in proper region
 				if ((!onSnakeBody(new_x, new_y)) && (headX != new_x) && (headY != new_y) &&
 					(!onObstacles(new_x, new_y)) && (new_y >= RegionStartY)) {
-					cout << "X: " << new_x << " Y: " << new_y << endl;
+					if (verbose) cout << "X: " << new_x << " Y: " << new_y << endl;
 					if (frt.getAttribute() == HEART_FRT || frt.getAttribute() == EVIL_FRT) {
 						lastTimeSpecialFruit = now();
 					}
@@ -644,19 +646,19 @@ class Snake : public Displayable {
 			if (frt.getX() == headX && frt.getY() == headY) {
 				if (frt.getAttribute() == NORMAL_FRT) {
 					score++;
-					cout << "Eat Scoring Fruit!" << endl;
+					if (verbose) cout << "Eat Scoring Fruit!" << endl;
 					attribute = NORMAL_FRT;
 				} else if (frt.getAttribute() == HEART_FRT) {
 					if (numOfLives < 5) {
 						numOfLives++;
-						cout << "Eat Heart Fruit, incresed lives by 1" << endl;
+						if (verbose) cout << "Eat Heart Fruit, incresed lives by 1" << endl;
 					} else {
-						cout << "Hit Max Lives" << endl;
+						if (verbose) cout << "Hit Max Lives" << endl;
 					}
 					attribute = HEART_FRT;
 				} else { // evil fruit
 					numOfLives--;
-					cout << "Eat Evil Fruit, decreased lives by 1" << endl;
+					if (verbose) cout << "Eat Evil Fruit, decreased lives by 1" << endl;
 					attribute = EVIL_FRT;
 					if (numOfLives == 0) {
 						curStage = GAMEOVER_STG;
@@ -685,7 +687,7 @@ class Snake : public Displayable {
 */
 		bool didHitObstacle() {
 			if (onObstacles(headX, headY)) {
-				cout << "Hit the obstables" << endl;
+				if (verbose) cout << "Hit the obstables" << endl;
 				return true;
 			}
 			return false;
@@ -699,7 +701,7 @@ class Snake : public Displayable {
 		    	}
 		    	if (numOfLives == 0) {
 		    		curStage = GAMEOVER_STG;
-		    		cout << "Game Over!" << endl;
+		    		if (verbose) cout << "Game Over!" << endl;
 		    	}
 		    } else {
 		    	stillInObstacles = false;
@@ -711,8 +713,6 @@ class Snake : public Displayable {
 
 			headX = MyMod(RegionStartX, RegionEndX, headX + x_speed);
 			headY = MyMod(RegionStartY, RegionEndY, headY + y_speed);
-
-			cout << "x_speed: " << x_speed << " y_speed: " << y_speed << endl;
 
 			didDead();
 
@@ -985,10 +985,9 @@ void handleKeyPress(XInfo &xinfo, XEvent &event) {
 		&key, 					// workstation-independent key symbol
 		NULL );					// pointer to a composeStatus structure (unused)
 	if (i == 1) {
-		printf("Got key press -- %c\n", text[0]);
+		if (verbose) printf("Got key press -- %c\n", text[0]);
 
 		switch (text[0]) { // handle upper case and lower case WASD/wasd keys
-			cout << "pressed: " << text[0] << endl;
 			case 'q':
 			case 'Q':
 				error("Terminating normally."); // can quit at any stage
@@ -1094,14 +1093,14 @@ void eventLoop(XInfo &xinfo) {
 
 	curStage = START_STG;
 
-	unsigned long Start = now();
-	unsigned long End = now();
+	unsigned long frameStart = now();
+	unsigned long frameEnd = frameStart;
 
 	while( true ) {
 
 		if (XPending(xinfo.display) > 0) {
 			XNextEvent( xinfo.display, &event );
-			cout << "event.type=" << event.type << "\n";
+			if (verbose) cout << "event.type=" << event.type << "\n";
 			switch( event.type ) {
 				case KeyPress:
 					handleKeyPress(xinfo, event);
@@ -1127,18 +1126,19 @@ void eventLoop(XInfo &xinfo) {
 		}
 
 		unsigned long moveEnd = now(); // time in microseconds
-		if (moveEnd - lastMove > 1000000/speed) {
+		if (moveEnd - lastMove > 500000/speed) {
 			snake.move(xinfo);
 			lastMove = now();
 		}
 
-		End = now();
+		frameEnd = now();
 		if (XPending(xinfo.display) == 0) {
-			usleep(1000000/FPS - (End - Start));
-			Start = now();
+			if (verbose) cout << 1000000/FPS - (frameEnd - frameStart) << endl;
+			if ((frameEnd - frameStart) < 1000000/FPS) usleep(1000000/FPS - (frameEnd - frameStart));
+			frameStart = now();
 		} else {
-			if (End >= (Start + 1000000/FPS)) {
-				Start += 1000000/FPS;
+			while (frameEnd > (frameStart + 1000000/FPS)) {
+				frameStart += 1000000/FPS;
 			}
 		}
 	}
@@ -1197,11 +1197,11 @@ void eventLoop(XInfo &xinfo) {
 		}
 
 		if (XPending(xinfo.display) == 0) {
-			/*
-			cout << "difference: " << (repaintEnd - lastRepaint) << endl;
-			cout << "100000/FPS: " << 1000000/FPS << endl;
-			cout << "time sleep: " << 1000000/FPS - (repaintEnd - lastRepaint) << endl;
-*/
+			
+			//cout << "difference: " << (repaintEnd - lastRepaint) << endl;
+			//cout << "100000/FPS: " << 1000000/FPS << endl;
+			//cout << "time sleep: " << 1000000/FPS - (repaintEnd - lastRepaint) << endl;
+
 			//cout << "time sleep: " << 1000000/FPS + lastRepaint - repaintEnd << endl;
 			usleep(1000000/FPS + repaintEnd - lastRepaint);
 		}
