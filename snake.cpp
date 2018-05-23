@@ -98,7 +98,7 @@ unsigned long SpecialFruitTimeUsed = 0;
 
 unsigned int score = 0;
 
-unsigned int numOfLives = 50;
+unsigned int numOfLives = 3;
 
 
 /* stage indicates the current stage of the game (start, playing, pause, gameover) */
@@ -389,9 +389,9 @@ public:
 
 		unsigned i = numOfLives-1;
 		for (unsigned j = 0; j < numOfLives && j < MAX_LIVES; j++) {
-			int k = j * 35;
-			XPoint points[10] = {{250+k, 20}, {255+k, 15}, {260+k, 15}, {263+k, 18}, {263+k, 22},
-								 {250+k, 35}, {237+k, 22}, {237+k, 18}, {240+k, 15}, {245+k, 15}};
+			short k = j * 35; // because XPoint has type short
+			XPoint points[10] = {{(short)(250+k), 20}, {(short)(255+k), 15}, {(short)(260+k), 15}, {(short)(263+k), 18}, {(short)(263+k), 22},
+								 {(short)(250+k), 35}, {(short)(237+k), 22}, {(short)(237+k), 18}, {(short)(240+k), 15}, {(short)(245+k), 15}};
 			XFillPolygon(xinfo.display, xinfo.window, xinfo.gc[TOMATO_GC], points, 10, Nonconvex, CoordModeOrigin);			
 		}
 
@@ -1076,7 +1076,7 @@ void handleAnimation(XInfo &xinfo, int inside) {
 		lastEnterLeaveNotify = inside;
 	}
 }
-/*
+
 void eventLoop(XInfo &xinfo) {
 	// Add stuff to paint to the display list
 	dList.push_front(&pauseDisplay);
@@ -1144,8 +1144,8 @@ void eventLoop(XInfo &xinfo) {
 	}
 }
 
-*/
 
+/*
 void eventLoop(XInfo &xinfo) {
 	// Add stuff to paint to the display list
 	dList.push_front(&pauseDisplay);
@@ -1207,7 +1207,7 @@ void eventLoop(XInfo &xinfo) {
 		}
 	}
 }
-
+*/
 
 /*
  * Start executing here.

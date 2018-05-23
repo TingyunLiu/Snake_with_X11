@@ -5,16 +5,16 @@ NAME = snake
 
 #
 # Add $(MAC_OPT) to the compile line for Mac OSX.
-MAC_OPT = "-I/opt/X11/include"
+MAC_OPT = -I/opt/X11/include
 
 all:
 	@echo "Compiling..."
-	g++ -o $(NAME) $(NAME).cpp -L/usr/X11R6/lib -lX11 -lstdc++ $(MAC_OPT)
+	g++ -o $(NAME) $(NAME).cpp -L/usr/X11R6/lib -lX11 -lstdc++ -std=c++11 $(MAC_OPT)
 
 run: all
 	@echo "Running..."
 	./$(NAME) 
 
+.PHONY: clean
 clean:
-	-rm animation clipping doublebuffer drawing drawing.min 
-	-rm eventloop eventloop.min hello.min null null.min openwindow openwindow.min
+	rm snake
